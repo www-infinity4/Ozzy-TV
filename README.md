@@ -14,11 +14,11 @@ Ozzy TV is a synchronized rock and heavy-metal music-video channel built on the 
 
 ## Daily and weekly rotation
 
-`engine.js` builds a deterministic schedule from the viewer's local calendar date. Every day receives a different seed and ordering. The scheduler exhausts the available catalog before reshuffling, so repeats are spaced as far apart as the available pool permits.
+`engine.js` builds one deterministic **1,008-slot weekly rotation** first, then divides it into seven consecutive 144-slot days. The scheduler exhausts every available playable video before reshuffling, so repeats are pushed as far apart as the available source pool permits.
 
-Every Sunday at local midnight the **week key changes**. That automatically rebuilds the coming seven-day rotation with a new weekly seed instead of replaying the prior week's sequence.
+Every Sunday at local midnight the **week key changes**. That rebuilds all 1,008 positions with a new weekly seed instead of replaying the prior week's sequence.
 
-The engine supports 144+ unique playable entries per day and 1,008+ unique entries per week as the catalog grows. The initial committed catalog is a starter broadcast pool; adding more verified embeddable music videos automatically increases variety without changing the scheduler.
+With at least 144 verified playable videos, a day can run 144 unique entries. With at least 1,008 verified playable videos, the entire seven-day guide can run without repeating a video. The initial committed catalog is a starter broadcast pool, so it currently has to reuse videos after the pool is exhausted; adding verified embeddable music videos automatically increases variety without changing the scheduler.
 
 ## Network integration
 
