@@ -37,20 +37,14 @@
     return zonedToUtc(p.year, p.month, p.day, 0, 0, 0);
   }
 
-  function localDayMs(nowMs, offset, hour) {
-    const p = stationParts(new Date(nowMs));
-    const utcDate = new Date(Date.UTC(p.year, p.month - 1, p.day + offset, hour == null ? 12 : hour, 0, 0));
-    return zonedToUtc(utcDate.getUTCFullYear(), utcDate.getUTCMonth() + 1, utcDate.getUTCDate(), utcDate.getUTCHours(), 0, 0);
-  }
-
   function weekInfo(nowMs) {
     const p = stationParts(new Date(nowMs));
     const localDate = new Date(Date.UTC(p.year, p.month - 1, p.day));
-    const sundayOffset = -localDate.getUTCDay();
-    const sunday = new Date(Date.UTC(p.year, p.month - 1, p.day + sundayOffset));
+    const dayIndex = localDate.getUTCDay();
+    const sunday = new Date(Date.UTC(p.year, p.month - 1, p.day - dayIndex));
     const startMs = zonedToUtc(sunday.getUTCFullYear(), sunday.getUTCMonth() + 1, sunday.getUTCDate(), 0, 0, 0);
     const key = `${sunday.getUTCFullYear()}-${String(sunday.getUTCMonth()+1).padStart(2,"0")}-${String(sunday.getUTCDate()).padStart(2,"0")}`;
-    return {key,startMs};
+    return {key,startMs,dayIndex};
   }
 
   function weekKey(nowMs) { return weekInfo(nowMs).key; }
@@ -82,24 +76,24 @@
     return !!(program && program.cleared && program.videoId && (program.title || program.songTitle));
   }
 
-  function makeDailyRotation(nowMs, catalog) {
+  function makeWeekRotation(nowMs, catalog) {
     const pool = (Array.isArray(catalog) ? catalog : []).filter(eligible);
     if (!pool.length) throw new Error("Ozzy TV has no playable music videos in its catalog.");
 
     const channelSalt = (root.INFINITY_CHANNEL && root.INFINITY_CHANNEL.id) || "OZZY-TV";
-    const baseSeed = `${channelSalt}:week:${weekKey(nowMs)}:day:${dateKey(nowMs)}:rotation-v1`;
+    const seedBase = `${channelSalt}:week:${weekKey(nowMs)}:rotation-v2`;
     const result = [];
     let pass = 0;
     let priorId = "";
 
-    while (result.length < SLOTS_PER_DAY) {
-      const batch = seededShuffle(pool, `${baseSeed}:pass:${pass++}`);
+    while (result.length < SLOTS_PER_WEEK) {
+      const batch = seededShuffle(pool, `${seedBase}:pass:${pass++}`);
       if (batch.length > 1 && priorId && batch[0].videoId === priorId) {
         const swapIndex = batch.findIndex(item => item.videoId !== priorId);
         if (swapIndex > 0) [batch[0], batch[swapIndex]] = [batch[swapIndex], batch[0]];
       }
       for (const program of batch) {
-        if (result.length >= SLOTS_PER_DAY) break;
+        if (result.length >= SLOTS_PER_WEEK) break;
         result.push(program);
         priorId = program.videoId;
       }
@@ -108,9 +102,13 @@
   }
 
   function createDaySchedule(nowMs, catalog) {
+    const info = weekInfo(nowMs);
     const midnightMs = localMidnightMs(nowMs);
     const todayKey = dateKey(nowMs);
-    const rotation = makeDailyRotation(nowMs, catalog);
+    const weekly = makeWeekRotation(nowMs, catalog);
+    const offset = info.dayIndex * SLOTS_PER_DAY;
+    const rotation = weekly.slice(offset, offset + SLOTS_PER_DAY);
+
     return rotation.map(function (program, index) {
       const startsAtMs = midnightMs + index * BLOCK_SECONDS * 1000;
       return {
@@ -122,32 +120,34 @@
         blockSeconds:BLOCK_SECONDS,
         fullStationSeconds:BLOCK_SECONDS,
         slotIndex:index,
-        weekKey:weekKey(nowMs)
+        weekSlotIndex:offset + index,
+        weekKey:info.key
       };
     });
   }
 
   function createWeekSchedule(nowMs, catalog) {
     const info = weekInfo(nowMs);
-    const days = [];
-    for (let day = 0; day < DAYS_PER_WEEK; day++) {
-      const anchor = localDayMs(info.startMs, day, 12);
-      days.push.apply(days, createDaySchedule(anchor, catalog));
-    }
-    return days;
+    const weekly = makeWeekRotation(nowMs, catalog);
+    return weekly.map(function (program, index) {
+      const startsAtMs = info.startMs + index * BLOCK_SECONDS * 1000;
+      return {
+        id:`${info.key}-W-${String(index).padStart(4,"0")}`,
+        movie:program,
+        program:program,
+        startsAtMs,
+        endsAtMs:startsAtMs + BLOCK_SECONDS * 1000,
+        blockSeconds:BLOCK_SECONDS,
+        fullStationSeconds:BLOCK_SECONDS,
+        weekSlotIndex:index,
+        weekKey:info.key
+      };
+    });
   }
 
   function createSegments(block) {
     const program = block.movie || block.program;
-    return [{
-      kind:"music",
-      title:program.title,
-      videoId:program.videoId,
-      cleared:!!program.cleared,
-      sourceStart:0,
-      stationStart:0,
-      duration:BLOCK_SECONDS
-    }];
+    return [{kind:"music",title:program.title,videoId:program.videoId,cleared:!!program.cleared,sourceStart:0,stationStart:0,duration:BLOCK_SECONDS}];
   }
 
   function resolve(nowMs, schedule) {
@@ -155,34 +155,14 @@
     const block = schedule.find(item => nowMs >= item.startsAtMs && nowMs < item.endsAtMs) || schedule[schedule.length - 1];
     const blockElapsed = Math.max(0, Math.min(BLOCK_SECONDS - 1, Math.floor((nowMs - block.startsAtMs) / 1000)));
     const segment = createSegments(block)[0];
-    return {
-      block,
-      segment,
-      segmentElapsed:blockElapsed,
-      blockElapsed,
-      mediaSeconds:blockElapsed,
-      segmentRemaining:Math.max(0, BLOCK_SECONDS - blockElapsed),
-      blockRemaining:Math.max(0, BLOCK_SECONDS - blockElapsed)
-    };
+    return {block,segment,segmentElapsed:blockElapsed,blockElapsed,mediaSeconds:blockElapsed,segmentRemaining:Math.max(0,BLOCK_SECONDS-blockElapsed),blockRemaining:Math.max(0,BLOCK_SECONDS-blockElapsed)};
   }
 
   function stationDurationSeconds() { return BLOCK_SECONDS; }
 
   root.HermitEngine = {
-    TIME_ZONE,
-    BLOCK_SECONDS,
-    SLOTS_PER_DAY,
-    DAYS_PER_WEEK,
-    SLOTS_PER_WEEK,
-    stationParts,
-    zonedToUtc,
-    dateKey,
-    weekKey,
-    weekInfo,
-    stationDurationSeconds,
-    createDaySchedule,
-    createWeekSchedule,
-    createSegments,
-    resolve
+    TIME_ZONE,BLOCK_SECONDS,SLOTS_PER_DAY,DAYS_PER_WEEK,SLOTS_PER_WEEK,
+    stationParts,zonedToUtc,dateKey,weekKey,weekInfo,stationDurationSeconds,
+    makeWeekRotation,createDaySchedule,createWeekSchedule,createSegments,resolve
   };
 })(window);
