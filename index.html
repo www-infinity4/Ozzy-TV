@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <meta name="theme-color" content="#09070d">
+  <title>Ozzy TV — Rock & Metal Music Videos Live</title>
+  <meta name="description" content="Ozzy TV is a synchronized rock and heavy-metal music-video channel: 144 ten-minute slots every day, with intermission space reserved for future music advertising.">
+  <link rel="canonical" href="https://www-infinity4.github.io/Ozzy-TV/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Ozzy TV">
+  <meta property="og:title" content="Ozzy TV — The Rock Video Is Already Playing">
+  <meta property="og:description" content="144 rock and metal music-video slots a day. Songs play to the end; intermission fills the rest of each ten-minute slot.">
+  <meta property="og:url" content="https://www-infinity4.github.io/Ozzy-TV/">
+  <meta property="og:image" content="https://i.ytimg.com/vi/CprfjfN5PRs/maxresdefault.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Ozzy TV — Rock & Metal Music Videos Live">
+  <meta name="twitter:description" content="A synchronized 24-hour rock and heavy-metal music-video channel with a seven-day rotating guide.">
+  <meta name="twitter:image" content="https://i.ytimg.com/vi/CprfjfN5PRs/maxresdefault.jpg">
+  <link rel="stylesheet" href="styles.css?v=20260913-ozzy1">
+</head>
+<body style="--program-art:url('https://i.ytimg.com/vi/CprfjfN5PRs/maxresdefault.jpg')">
+  <header class="masthead">
+    <a class="brand" href="#top" aria-label="Ozzy TV home"><span class="brand-mark">O</span><span>OZZY TV</span></a>
+    <details class="channel-menu">
+      <summary aria-label="Open channel menu"><span aria-hidden="true">☰</span><span class="menu-label">Channels</span></summary>
+      <nav aria-label="Switch channels"></nav>
+    </details>
+    <div class="on-air"><span></span> ON AIR</div>
+    <time id="stationClock">--:-- -- local</time>
+  </header>
+
+  <main id="top">
+    <section class="theater" aria-labelledby="nowTitle">
+      <div class="marquee">
+        <div>
+          <p id="modeLabel">LIVE MUSIC VIDEO</p>
+          <h1 id="nowTitle">Loading Ozzy TV…</h1>
+          <strong id="nowArtist">Rock · Heavy Metal</strong>
+        </div>
+        <div class="program-time" id="programTime">10-minute station slot</div>
+      </div>
+
+      <div class="screen-shell" id="screenShell">
+        <div class="screen-glow" aria-hidden="true"></div>
+        <div id="player" class="player" aria-label="Ozzy TV music video player"></div>
+        <div id="stationCard" class="station-card" hidden>
+          <p id="stationCardLabel">OZZY TV INTERMISSION</p>
+          <strong id="stationCardTitle">Reserved advertising window</strong>
+          <span id="stationCardCountdown"></span>
+        </div>
+        <button id="enterButton" class="enter-button" type="button">
+          <span>Enter Ozzy TV</span>
+          <small>Join the rock video at the exact station moment airing now</small>
+        </button>
+      </div>
+
+      <div class="controls" aria-label="Playback controls">
+        <button id="restartButton" type="button">Restart song</button>
+        <button id="rewindButton" type="button">Rewind 30 sec</button>
+        <button id="liveButton" class="live-button" type="button"><span></span> Join live</button>
+        <button id="shareButton" class="share-button" type="button">Share · +1/10 ⭐</button>
+        <span id="shareStatus" class="share-status" role="status" aria-live="polite"></span>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-meta"><span id="positionLabel">Synchronized station clock</span><span id="remainingLabel">-- to next video</span></div>
+        <div class="progress-track"><div id="progressBar"></div></div>
+      </div>
+    </section>
+
+    <section class="next-up" aria-labelledby="nextHeading">
+      <div class="section-heading"><p>10-MINUTE VIDEO SLOTS · 144 PER DAY</p><h2 id="nextHeading">Coming up on Ozzy TV</h2></div>
+      <div id="nextCards" class="next-grid"></div>
+    </section>
+
+    <section class="guide" aria-labelledby="guideHeading">
+      <div class="section-heading guide-heading">
+        <div><p>SEVEN-DAY ROCK ROTATION · NEW WEEKLY SEED</p><h2 id="guideHeading">TV guide</h2></div>
+        <span id="guideDate"></span>
+      </div>
+      <div id="guideRows" class="guide-rows"></div>
+    </section>
+  </main>
+
+  <section class="about-grid" aria-label="Ozzy TV schedule rules">
+    <article><strong>144</strong><span>ten-minute slots every local day</span></article>
+    <article><strong>1,008</strong><span>station slots in each seven-day guide</span></article>
+    <article><strong>Natural end</strong><span>music videos play until finished; the remaining slot becomes intermission</span></article>
+    <article><strong>Sunday</strong><span>a new weekly seed rebuilds the coming rotation automatically</span></article>
+  </section>
+
+  <section class="channel-directory" aria-labelledby="channelDirectoryHeading">
+    <p id="channelDirectoryHeading">Choose another channel</p>
+    <nav aria-label="All channels"></nav>
+  </section>
+
+  <footer><span>OZZY TV</span><p>Rock and metal videos all day. Intermission inventory is reserved for future music-related advertising.</p></footer>
+
+  <script src="data/catalog.js?v=20260913-ozzy1"></script>
+  <script src="engine.js?v=20260913-ozzy1"></script>
+  <script src="https://www-infinity4.github.io/TNT/channels.js?v=20260913-ozzy1"></script>
+  <script src="app.js?v=20260913-ozzy1"></script>
+  <script src="https://www-infinity4.github.io/TNT/weekly-guide.js?v=20260913-week3"></script>
+  <script src="https://www-infinity4.github.io/TNT/pip.js?v=20260913-restore1"></script>
+</body>
+</html>
