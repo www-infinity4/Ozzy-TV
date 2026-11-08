@@ -67,8 +67,9 @@
     scheduleKey = key;
     lastScheduleBucket = bucket;
     pendingCatalogChange = false;
-    const available = catalog.filter(item => !failedVideoIds.has(item.videoId));
-    schedule = engine.createDaySchedule(nowMs, available.length ? available : catalog);
+    // Maintain ONE station schedule across all viewers. A video that fails on
+    // one device is substituted only in that device's current playback slot.
+    schedule = engine.createDaySchedule(nowMs, catalog);
     renderGuide(nowMs);
   }
 
