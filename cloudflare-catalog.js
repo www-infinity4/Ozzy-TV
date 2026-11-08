@@ -3,7 +3,7 @@
  * unreachable or returns untrusted records. No secrets or wallet changes. */
 (function (root) {
  "use strict";
- const DEFAULT_ENDPOINT='https://quantaphi.org/api/ozzy/catalog';
+ const DEFAULT_ENDPOINT='https://quantaphi-ozzy-catalog.marvaseater.workers.dev/api/ozzy/catalog';
  const URL_SOURCE=root.OZZY_CATALOG_ENDPOINT||DEFAULT_ENDPOINT;
  const REVIEWED_TARGET=1000;
  const catalog=Array.isArray(root.HERMIT_CATALOG)?root.HERMIT_CATALOG:[];
