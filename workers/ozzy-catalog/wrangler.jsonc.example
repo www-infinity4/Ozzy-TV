@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "quantaphi-ozzy-catalog",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-07",
+  "workers_dev": false,
+  "triggers": {"crons": ["17 */6 * * *"]},
+  "d1_databases": [{"binding":"DB","database_name":"quantaphi-ozzy-catalog","database_id":"REPLACE_WITH_VERIFIED_CLOUDFLARE_DATABASE_ID"}],
+  "vars": {"OZZY_REVIEWED_MANIFEST_URL":"https://raw.githubusercontent.com/www-infinity4/Ozzy-TV/main/data/approved-videos.json"}
+}
