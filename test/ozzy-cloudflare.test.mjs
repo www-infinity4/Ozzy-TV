@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeVideo, buildWeeklyRotation, getCatalogResponse, refreshReviewedManifest, discoverOfficialVideoCandidates, default as worker} from '../workers/ozzy-catalog/worker.mjs';
+import {normalizeVideo, buildWeeklyRotation, getCatalogResponse, refreshReviewedManifest, discoverOfficialVideoCandidates, OFFICIAL_CHANNELS, default as worker} from '../workers/ozzy-catalog/worker.mjs';
 const video=(i)=>({videoId:'A'+String(i).padStart(10,'0'),artist:'Ozzy artist '+i,songTitle:'Rock track '+i,sourceUrl:'https://www.youtube.com/watch?v=A'+String(i).padStart(10,'0'),reviewedAt:Date.UTC(2026,10,7),embedApproved:true,reviewSource:'QuantaPhi approved source catalog'});
 const epoch=Date.UTC(2026,10,7,12);
 test('reviewed YouTube music videos normalize and unreviewed, forged or invalid clips fail closed',()=>{
@@ -185,4 +185,13 @@ test('adding one approved video is incremental and never deletes unrelated revie
  assert.equal(statements.some(q=>/^DELETE FROM ozzy_videos/i.test(q.sql)),false,
   'do not erase verified rows just because the latest manifest omitted them');
  assert.equal(statements.filter(q=>/INSERT INTO ozzy_videos/.test(q.sql)).length,1);
+});
+
+test('reviewed rock-video discovery sources include eight distinct official artist channels',()=>{
+ const names=['Ozzy Osbourne','Black Sabbath','Metallica','Iron Maiden',
+  'Judas Priest','Queen','Linkin Park','Quiet Riot'];
+ assert.equal(OFFICIAL_CHANNELS.length,8);
+ assert.equal(new Set(OFFICIAL_CHANNELS.map(x=>x.id)).size,8);
+ for(const name of names)assert.ok(OFFICIAL_CHANNELS.some(x=>x.artist===name),name);
+ for(const source of OFFICIAL_CHANNELS)assert.match(source.id,/^UC[A-Za-z0-9_-]{22}$/);
 });
