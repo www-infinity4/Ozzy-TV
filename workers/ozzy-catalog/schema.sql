@@ -32,3 +32,14 @@ CREATE TABLE IF NOT EXISTS ozzy_candidates (
  review_status TEXT NOT NULL DEFAULT 'pending' CHECK(review_status IN ('pending','approved','rejected'))
 );
 CREATE INDEX IF NOT EXISTS ozzy_candidates_review ON ozzy_candidates(review_status,discovered_at);
+
+-- Observed per-source HTTP status and parsed item counts. Feed failures are
+-- observable without modifying approved music or inventing new candidates.
+CREATE TABLE IF NOT EXISTS ozzy_feed_checks (
+ channel_id TEXT PRIMARY KEY NOT NULL,
+ artist TEXT NOT NULL,
+ checked_at INTEGER NOT NULL,
+ status_code INTEGER NOT NULL,
+ entry_count INTEGER NOT NULL DEFAULT 0,
+ error TEXT NOT NULL DEFAULT ''
+);
