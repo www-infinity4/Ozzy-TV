@@ -137,8 +137,11 @@ export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
    if(!p||ids.has(p.videoId))continue;
    items.push(p);ids.add(p.videoId);
   }
-  if(data.items.length>0&&items.length===0)return {ok:false,error:'no_reviewed_items'};
-  const queries=[env.DB.prepare("DELETE FROM ozzy_videos WHERE import_source='github-reviewed-manifest'").bind()];
+  if(data.items.length===0)return {ok:false,error:'approved_manifest_empty'};
+  if(items.length===0)return {ok:false,error:'no_reviewed_items'};
+  // Incremental upserts: a temporarily empty or partial manifest must never
+  // erase previously reviewed music. Disable/revoke only via a reviewed action.
+  const queries=[];
   for(const p of items){
    queries.push(env.DB.prepare(
     `INSERT INTO ozzy_videos (video_id, artist, song_title, source_url, reviewed_at, review_source, embed_approved, review_status, import_source, imported_at) VALUES (?1,?2,?3,?4,?5,?6,1,'approved','github-reviewed-manifest',?7)
