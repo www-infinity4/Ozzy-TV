@@ -141,7 +141,7 @@ export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
   const queries=[env.DB.prepare("DELETE FROM ozzy_videos WHERE import_source='github-reviewed-manifest'").bind()];
   for(const p of items){
    queries.push(env.DB.prepare(
-    "INSERT INTO ozzy_videos (video_id, artist, song_title, source_url, reviewed_at, review_source, embed_approved, review_status, import_source, imported_at) VALUES (?1,?2,?3,?4,?5,?6,1,'approved','github-reviewed-manifest',?7)
+    `INSERT INTO ozzy_videos (video_id, artist, song_title, source_url, reviewed_at, review_source, embed_approved, review_status, import_source, imported_at) VALUES (?1,?2,?3,?4,?5,?6,1,'approved','github-reviewed-manifest',?7)
      ON CONFLICT(video_id) DO UPDATE SET
        artist=excluded.artist,
        song_title=excluded.song_title,
@@ -151,7 +151,7 @@ export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
        embed_approved=excluded.embed_approved,
        review_status=excluded.review_status,
        import_source=excluded.import_source,
-       imported_at=excluded.imported_at"
+       imported_at=excluded.imported_at`
    ).bind(p.videoId,p.artist,p.songTitle,p.sourceUrl,p.reviewedAt,p.reviewSource,now));
   }
   queries.push(env.DB.prepare(
