@@ -153,6 +153,69 @@ export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
   return {ok:false,error:'reviewed_manifest_refresh_failed'};
  }
 }
+// Approved artist-channel IDs; their RSS uploads are DISCOVERY CANDIDATES only.
+// This never grants broadcast permission or marks YouTube embedding as playable.
+const OFFICIAL_CHANNELS=[
+ {id:'UCe3JCin4Gnv9azlWnAs5keg',artist:'Ozzy Osbourne'},
+ {id:'UCrx-X329UKv0Y06VhfpFVvw',artist:'Black Sabbath'},
+ {id:'UCbulh9WdLtEXiooRcYK7SWw',artist:'Metallica'},
+ {id:'UCaisXKBdNOYqGr2qOXCLchQ',artist:'Iron Maiden'}
+];
+function xmlTitle(source){
+ const raw=String(source||'').replace(/<[^>]+>/g,'');
+ return raw.replace(/&amp;/g,'&').replace(/&quot;/g,'"')
+  .replace(/&apos;/g,"'").replace(/&lt;/g,'<').replace(/&gt;/g,'>').trim().slice(0,200);
+}
+export async function discoverOfficialVideoCandidates(env,now=Date.now(),fetcher=fetch){
+ if(!env?.DB)return {ok:false,error:'database_not_configured'};
+ const found=new Map();
+ let success=0;
+ // Only fixed public official artist channels, never user-provided arbitrary URLs.
+ const fetched=await Promise.all(OFFICIAL_CHANNELS.map(async channel=>{
+  try{
+   const url='https://www.youtube.com/feeds/videos.xml?channel_id='+channel.id;
+   const response=await fetcher(url,{
+    method:'GET',redirect:'error',cache:'no-store',
+    headers:{Accept:'application/atom+xml,application/xml'},
+    signal:AbortSignal.timeout(10000)
+   });
+   if(!response.ok||response.status!==200||
+    Number(response.headers?.get?.('content-length')||0)>256000)return null;
+   const xml=await response.text();
+   if(xml.length>256000)return null;
+   return {channel,xml};
+  }catch{return null}
+ }));
+ for(const result of fetched){
+  if(!result)continue;
+  success++;
+  const entries=result.xml.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/g)||[];
+  for(const entry of entries.slice(0,15)){
+   const id=entry.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\/yt:videoId>/)?.[1];
+   const rawTitle=entry.match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/)?.[1]||'';
+   const title=xmlTitle(rawTitle);
+   const published=Date.parse(entry.match(/<published>([^<]+)<\/published>/)?.[1]||'');
+   if(!isYTId(id)||title.length<3||!Number.isFinite(published)||published>now+86400000)continue;
+   if(!found.has(id))found.set(id,{
+    videoId:id,artist:result.channel.artist,title,channelId:result.channel.id,
+    publishedAt:published
+   });
+  }
+ }
+ if(!success)return {ok:false,error:'official_feeds_unavailable',discovered:0};
+ const queries=[];
+ for(const p of found.values()){
+  queries.push(env.DB.prepare(
+   "INSERT OR IGNORE INTO ozzy_candidates (video_id, artist, video_title, channel_id, source_url, published_at, discovered_at, review_status) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending')"
+  ).bind(p.videoId,p.artist,p.title,p.channelId,
+   'https://www.youtube.com/watch?v='+p.videoId,p.publishedAt,now));
+ }
+ try{
+  if(queries.length)await env.DB.batch(queries);
+  return {ok:true,discovered:found.size,officialFeeds:success,reviewStatus:'pending'};
+ }catch{return {ok:false,error:'candidate_queue_write_failed',discovered:0}}
+}
+
 export default {
  async fetch(request,env){
   const u=new URL(request.url);
@@ -166,8 +229,12 @@ export default {
   return result;
  },
  async scheduled(_event,env,ctx){
-  ctx.waitUntil(refreshReviewedManifest(env).then(r=>{
-   if(!r.ok)console.warn('ozzy_reviewed_catalog_refresh',r.error);
+  ctx.waitUntil(Promise.all([
+   refreshReviewedManifest(env),
+   discoverOfficialVideoCandidates(env)
+  ]).then(([approved,candidates])=>{
+   if(!approved.ok)console.warn('ozzy_reviewed_catalog_refresh',approved.error);
+   if(!candidates.ok)console.warn('ozzy_official_candidate_refresh',candidates.error);
   }));
  }
 };
