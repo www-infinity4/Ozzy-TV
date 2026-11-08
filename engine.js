@@ -1,7 +1,7 @@
 (function (root) {
   "use strict";
 
-  const TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago";
+  const TIME_ZONE = "America/Chicago"; // one real station timezone for all visitors
   const BLOCK_SECONDS = 600;
   const SLOTS_PER_DAY = 144;
   const DAYS_PER_WEEK = 7;
@@ -79,6 +79,16 @@
   function makeWeekRotation(nowMs, catalog) {
     const pool = (Array.isArray(catalog) ? catalog : []).filter(eligible);
     if (!pool.length) throw new Error("Ozzy TV has no playable music videos in its catalog.");
+
+    // Prefer the Cloudflare-reviewed, deterministic order when the server catalog
+    // and all 1,008 slot identities agree. Never accept unknown video IDs.
+    const authoritative = root.OZZY_WEEKLY_ORDER;
+    if (authoritative && authoritative.weekKey === weekKey(nowMs) &&
+        Array.isArray(authoritative.weeklyIds) && authoritative.weeklyIds.length === SLOTS_PER_WEEK) {
+      const lookup = new Map(pool.map(item => [item.videoId, item]));
+      const ordered = authoritative.weeklyIds.map(id => lookup.get(id));
+      if (ordered.every(Boolean)) return ordered;
+    }
 
     const channelSalt = (root.INFINITY_CHANNEL && root.INFINITY_CHANNEL.id) || "OZZY-TV";
     const seedBase = `${channelSalt}:week:${weekKey(nowMs)}:rotation-v2`;
