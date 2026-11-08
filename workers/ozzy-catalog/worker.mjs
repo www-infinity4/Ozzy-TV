@@ -168,11 +168,17 @@ export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
 }
 // Approved artist-channel IDs; their RSS uploads are DISCOVERY CANDIDATES only.
 // This never grants broadcast permission or marks YouTube embedding as playable.
-const OFFICIAL_CHANNELS=[
+// Identity refs: Wikimedia Wikidata official artist-channel identifiers,
+// cross-check YouTube publication before treating any discovered item as music.
+export const OFFICIAL_CHANNELS=[
  {id:'UCe3JCin4Gnv9azlWnAs5keg',artist:'Ozzy Osbourne'},
  {id:'UCrx-X329UKv0Y06VhfpFVvw',artist:'Black Sabbath'},
  {id:'UCbulh9WdLtEXiooRcYK7SWw',artist:'Metallica'},
- {id:'UCaisXKBdNOYqGr2qOXCLchQ',artist:'Iron Maiden'}
+ {id:'UCaisXKBdNOYqGr2qOXCLchQ',artist:'Iron Maiden'},
+ {id:'UC48vpdaG8NDvEGLj11XPPZQ',artist:'Judas Priest'},
+ {id:'UCiMhD4jzUqG-IgPzUmmytRQ',artist:'Queen'},
+ {id:'UCZU9T1ceaOgwfLRq7OKFU4Q',artist:'Linkin Park'},
+ {id:'UC_64i2VewDA-MGG0uA7L65w',artist:'Quiet Riot'}
 ];
 function xmlTitle(source){
  const raw=String(source||'').replace(/<[^>]+>/g,'');
