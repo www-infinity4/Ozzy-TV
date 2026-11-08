@@ -121,7 +121,7 @@ const validManifestUrl=env=>env?.OZZY_REVIEWED_MANIFEST_URL===SOURCE_URL;
 export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
  if(!env?.DB||!validManifestUrl(env))return {ok:false,error:'reviewed_manifest_not_configured'};
  try{
-  const response=await fetcher(SOURCE_URL,{method:'GET',redirect:'error',cache:'no-store',
+  const response=await fetcher(SOURCE_URL,{method:'GET',redirect:'manual',cache:'no-store',
    headers:{Accept:'application/json'},signal:AbortSignal.timeout(12000)});
   if(!response.ok||response.status!==200)return {ok:false,error:'manifest_http_unavailable'};
   if(Number(response.headers?.get?.('content-length')||0)>MAX_MANIFEST_SIZE)
@@ -184,7 +184,7 @@ export async function discoverOfficialVideoCandidates(env,now=Date.now(),fetcher
   try{
    const url='https://www.youtube.com/feeds/videos.xml?channel_id='+channel.id;
    const response=await fetcher(url,{
-    method:'GET',redirect:'error',cache:'no-store',
+    method:'GET',redirect:'manual',cache:'no-store',
     headers:{Accept:'application/atom+xml,application/xml'},
     signal:AbortSignal.timeout(10000)
    });
