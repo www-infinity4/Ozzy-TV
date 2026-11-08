@@ -84,11 +84,12 @@ test('official YouTube RSS sources add new songs to a pending-only D1 discovery 
  assert.ok(!rows.some(x=>/INSERT INTO ozzy_videos/.test(x.sql)));
 });
 test('RSS search failures cannot promote or erase existing broadcast records',async()=>{
- let statements=0;
- const db={prepare(){statements++;return {bind(){return {}}}},batch(){statements++;}};
+ const statements=[];
+ const db={prepare(sql){return {bind(...args){return {sql,args}}}},async batch(queries){statements.push(...queries);return queries.map(()=>({success:true}))}};
  const r=await discoverOfficialVideoCandidates({DB:db},epoch,async()=>({ok:false,status:503}));
  assert.equal(r.ok,false);
- assert.equal(statements,0);
+ assert.ok(statements.some(q=>q.sql.includes('ozzy_feed_checks')));
+ assert.ok(statements.every(q=>!q.sql.includes('ozzy_videos')));
 });
 
 test('reviewed catalog can PROMOTE an existing legacy song without a D1 primary-key collision',async()=>{
