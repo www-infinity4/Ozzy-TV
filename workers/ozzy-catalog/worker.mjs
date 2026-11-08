@@ -141,7 +141,17 @@ export async function refreshReviewedManifest(env,now=Date.now(),fetcher=fetch){
   const queries=[env.DB.prepare("DELETE FROM ozzy_videos WHERE import_source='github-reviewed-manifest'").bind()];
   for(const p of items){
    queries.push(env.DB.prepare(
-    "INSERT INTO ozzy_videos (video_id, artist, song_title, source_url, reviewed_at, review_source, embed_approved, review_status, import_source, imported_at) VALUES (?1,?2,?3,?4,?5,?6,1,'approved','github-reviewed-manifest',?7)"
+    "INSERT INTO ozzy_videos (video_id, artist, song_title, source_url, reviewed_at, review_source, embed_approved, review_status, import_source, imported_at) VALUES (?1,?2,?3,?4,?5,?6,1,'approved','github-reviewed-manifest',?7)
+     ON CONFLICT(video_id) DO UPDATE SET
+       artist=excluded.artist,
+       song_title=excluded.song_title,
+       source_url=excluded.source_url,
+       reviewed_at=excluded.reviewed_at,
+       review_source=excluded.review_source,
+       embed_approved=excluded.embed_approved,
+       review_status=excluded.review_status,
+       import_source=excluded.import_source,
+       imported_at=excluded.imported_at"
    ).bind(p.videoId,p.artist,p.songTitle,p.sourceUrl,p.reviewedAt,p.reviewSource,now));
   }
   queries.push(env.DB.prepare(
@@ -170,7 +180,6 @@ export async function discoverOfficialVideoCandidates(env,now=Date.now(),fetcher
  if(!env?.DB)return {ok:false,error:'database_not_configured'};
  const found=new Map();
  let success=0;
- // Only fixed public official artist channels, never user-provided arbitrary URLs.
  const fetched=await Promise.all(OFFICIAL_CHANNELS.map(async channel=>{
   try{
    const url='https://www.youtube.com/feeds/videos.xml?channel_id='+channel.id;
@@ -179,31 +188,40 @@ export async function discoverOfficialVideoCandidates(env,now=Date.now(),fetcher
     headers:{Accept:'application/atom+xml,application/xml'},
     signal:AbortSignal.timeout(10000)
    });
-   if(!response.ok||response.status!==200||
-    Number(response.headers?.get?.('content-length')||0)>256000)return null;
+   if(!response.ok||response.status!==200)return {channel,status:response.status||0,xml:'',error:'http_'+(response.status||0)};
+   if(Number(response.headers?.get?.('content-length')||0)>256000)
+    return {channel,status:200,xml:'',error:'feed_too_large'};
    const xml=await response.text();
-   if(xml.length>256000)return null;
-   return {channel,xml};
-  }catch{return null}
+   if(xml.length>256000)return {channel,status:200,xml:'',error:'feed_too_large'};
+   if(!/<feed\b/i.test(xml))return {channel,status:200,xml:'',error:'invalid_feed_document'};
+   // RSS is discovery evidence, NOT proof of song-vs-trailer classification.
+   return {channel,status:200,xml,error:''};
+  }catch{return {channel,status:0,xml:'',error:'fetch_failed'}}
  }));
+ const checks=[];
  for(const result of fetched){
-  if(!result)continue;
-  success++;
-  const entries=result.xml.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/g)||[];
-  for(const entry of entries.slice(0,15)){
-   const id=entry.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\/yt:videoId>/)?.[1];
-   const rawTitle=entry.match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/)?.[1]||'';
-   const title=xmlTitle(rawTitle);
-   const published=Date.parse(entry.match(/<published>([^<]+)<\/published>/)?.[1]||'');
-   if(!isYTId(id)||title.length<3||!Number.isFinite(published)||published>now+86400000)continue;
-   if(!found.has(id))found.set(id,{
-    videoId:id,artist:result.channel.artist,title,channelId:result.channel.id,
-    publishedAt:published
-   });
+  let count=0;
+  if(result.xml){
+   success++;
+   const entries=result.xml.match(/<entry\b[^>]*>[\s\S]*?<\/entry>/g)||[];
+   count=entries.length;
+   for(const entry of entries.slice(0,15)){
+    const id=entry.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\/yt:videoId>/)?.[1];
+    const rawTitle=entry.match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/)?.[1]||'';
+    const title=xmlTitle(rawTitle);
+    const published=Date.parse(entry.match(/<published>([^<]+)<\/published>/)?.[1]||'');
+    if(!isYTId(id)||title.length<3||!Number.isFinite(published)||published>now+86400000)continue;
+    if(!found.has(id))found.set(id,{
+     videoId:id,artist:result.channel.artist,title,channelId:result.channel.id,
+     publishedAt:published
+    });
+   }
   }
+  checks.push(env.DB.prepare(
+   'INSERT INTO ozzy_feed_checks (channel_id,artist,checked_at,status_code,entry_count,error) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(channel_id) DO UPDATE SET artist=excluded.artist,checked_at=excluded.checked_at,status_code=excluded.status_code,entry_count=excluded.entry_count,error=excluded.error'
+  ).bind(result.channel.id,result.channel.artist,now,result.status,count,result.error));
  }
- if(!success)return {ok:false,error:'official_feeds_unavailable',discovered:0};
- const queries=[];
+ const queries=[...checks];
  for(const p of found.values()){
   queries.push(env.DB.prepare(
    "INSERT OR IGNORE INTO ozzy_candidates (video_id, artist, video_title, channel_id, source_url, published_at, discovered_at, review_status) VALUES (?1,?2,?3,?4,?5,?6,?7,'pending')"
@@ -211,9 +229,27 @@ export async function discoverOfficialVideoCandidates(env,now=Date.now(),fetcher
    'https://www.youtube.com/watch?v='+p.videoId,p.publishedAt,now));
  }
  try{
-  if(queries.length)await env.DB.batch(queries);
+  await env.DB.batch(queries);
+  if(!success)return {ok:false,error:'official_feeds_unavailable',discovered:0,officialFeeds:0};
   return {ok:true,discovered:found.size,officialFeeds:success,reviewStatus:'pending'};
- }catch{return {ok:false,error:'candidate_queue_write_failed',discovered:0}}
+ }catch{return {ok:false,error:'candidate_or_health_write_failed',discovered:0}}
+}
+async function discoveryStatusResponse(env,origin=''){
+ if(!env?.DB)return json({ok:false,error:'database_not_configured'},503,origin);
+ try{
+  const counts=await env.DB.prepare(
+   'SELECT (SELECT COUNT(*) FROM ozzy_videos) AS videos, (SELECT COUNT(*) FROM ozzy_videos WHERE review_status=\\'approved\\' AND embed_approved=1) AS approved, (SELECT COUNT(*) FROM ozzy_candidates) AS candidates'
+  ).bind().first();
+  const rows=await env.DB.prepare(
+   'SELECT artist, channel_id AS channelId, checked_at AS checkedAt, status_code AS statusCode, entry_count AS entryCount, error FROM ozzy_feed_checks ORDER BY artist'
+  ).bind().all();
+  return json({ok:true,legacyAndReviewed:counts?.videos||0,approved:counts?.approved||0,
+   candidates:counts?.candidates||0,
+   feeds:(rows?.results||[]).map(r=>({
+    artist:r.artist,channelId:r.channelId,checkedAt:r.checkedAt,
+    statusCode:r.statusCode,entryCount:r.entryCount,error:r.error
+   }))},200,origin);
+ }catch{return json({ok:false,error:'discovery_status_unavailable'},503,origin)}
 }
 
 export default {
@@ -221,6 +257,12 @@ export default {
   const u=new URL(request.url);
   if(u.pathname==='/api/ozzy/health'){
    return json({ok:true,service:'ozzy-catalog',hasDatabase:!!env.DB},200,request.headers.get('origin')||'');
+  }
+  if(u.pathname==='/api/ozzy/discovery-status'){
+   if(!['GET','HEAD'].includes(request.method))return json({ok:false,error:'method_not_allowed'},405);
+   const response=await discoveryStatusResponse(env,request.headers.get('origin')||'');
+   if(request.method==='HEAD')return new Response(null,{status:response.status,headers:response.headers});
+   return response;
   }
   if(u.pathname!=='/api/ozzy/catalog')return json({ok:false,error:'not_found'},404);
   if(!['GET','HEAD'].includes(request.method))return json({ok:false,error:'method_not_allowed'},405);
