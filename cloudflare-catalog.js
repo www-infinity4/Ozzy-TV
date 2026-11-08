@@ -29,14 +29,19 @@
    typeof item.songTitle==='string'&&item.songTitle.trim().length>=2&&item.songTitle.length<=160&&
    item.cleared===true&&officialSource(item);
  }
+ function statusText(st){
+  if(st.source!=='cloudflare')
+   return st.count+' legacy videos · Cloudflare updates pending';
+  const reviewed=Math.max(0,Number(st.reviewedCount)||0);
+  const legacy=Math.max(0,Number(st.count)-reviewed);
+  return reviewed+' reviewed Cloudflare videos · '+legacy+
+   ' legacy fallback videos · goal '+st.target+' verified videos';
+ }
  function updateLabel(){
   if(typeof document==='undefined')return;
   const label=document.getElementById('catalogStatus');
   if(!label)return;
-  const st=root.OZZY_CATALOG_STATUS;
-  label.textContent=st.source==='cloudflare'
-   ?st.count+' reviewed videos in Cloudflare rotation · goal '+st.target
-   :st.count+' starter videos · Cloudflare updates pending';
+  label.textContent=statusText(root.OZZY_CATALOG_STATUS);
  }
  function apply(feed){
   if(!feed||feed.ok!==true||!Array.isArray(feed.items)||
@@ -97,7 +102,7 @@
   })();
   return pending;
  }
- root.OzzyCloudCatalog={refresh,apply};
+ root.OzzyCloudCatalog={refresh,apply,statusText};
  updateLabel();
  void refresh();
  setInterval(()=>{if(typeof document==='undefined'||!document.hidden)void refresh()},20*60000);
