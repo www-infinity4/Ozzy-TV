@@ -55,7 +55,7 @@ test('reviewed repo manifest imports valid, deduplicated rows into D1 with expli
  const db={prepare(sql){return {bind(...args){return {sql,args}}}},async batch(q){updates.push(...q);return q.map(()=>({success:true}))}};
  const env={DB:db,OZZY_REVIEWED_MANIFEST_URL:'https://raw.githubusercontent.com/www-infinity4/Ozzy-TV/main/data/approved-videos.json'};
  const r=await refreshReviewedManifest(env,epoch,async(_url,options)=>{
-  assert.equal(options.redirect,'error');
+  assert.equal(options.redirect,'manual');
   return {ok:true,status:200,text:async()=>JSON.stringify({items:[video(1),video(1),video(2)]}),headers:new Headers()};
  });
  assert.equal(r.ok,true);assert.equal(r.count,2);
@@ -74,7 +74,7 @@ test('official YouTube RSS sources add new songs to a pending-only D1 discovery 
  const db={prepare(sql){return {bind(...params){return {sql,params}}}},async batch(q){rows.push(...q);return q.map(()=>({success:true}))}};
  const r=await discoverOfficialVideoCandidates({DB:db},epoch,async(url,opts)=>{
   assert.ok(url.startsWith('https://www.youtube.com/feeds/videos.xml?channel_id='));
-  assert.equal(opts.redirect,'error');
+  assert.equal(opts.redirect,'manual');
   return {ok:true,status:200,headers:new Headers(),text:async()=>atom};
  });
  assert.equal(r.ok,true);
@@ -139,4 +139,25 @@ test('read-only discovery status endpoint discloses feed health without exposing
  assert.equal(payload.candidates,2);
  assert.equal(payload.feeds[0].statusCode,404);
  assert.ok(!JSON.stringify(payload).includes('token'));
+});
+test('reviewed manifest rejects HTTP redirect instead of fetching arbitrary redirected content',async()=>{
+ let writes=0;
+ const db={prepare(){writes++;return {bind(){return {}}}},batch(){throw Error('unexpected')}};
+ const env={DB:db,OZZY_REVIEWED_MANIFEST_URL:'https://raw.githubusercontent.com/www-infinity4/Ozzy-TV/main/data/approved-videos.json'};
+ const result=await refreshReviewedManifest(env,epoch,async(_url,options)=>{
+  assert.equal(options.redirect,'manual');
+  return {ok:false,status:302,headers:new Headers({Location:'https://untrusted.example/fake.json'})};
+ });
+ assert.equal(result.ok,false);
+ assert.equal(writes,0);
+});
+test('official YouTube RSS redirects are not followed and leave approved music untouched',async()=>{
+ let approvedWrites=0;
+ const db={prepare(sql){if(/ozzy_videos/.test(sql))approvedWrites++;return {bind(){return {sql}}}},async batch(){return []}};
+ const result=await discoverOfficialVideoCandidates({DB:db},epoch,async(_url,options)=>{
+  assert.equal(options.redirect,'manual');
+  return {ok:false,status:302,headers:new Headers({Location:'https://malicious.example'})};
+ });
+ assert.equal(result.ok,false);
+ assert.equal(approvedWrites,0);
 });
