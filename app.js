@@ -17,6 +17,10 @@
   let entered = false;
   let schedule = [];
   let scheduleKey = "";
+  let lastScheduleBucket = -1;
+  let pendingCatalogChange = false;
+  const slotFallbacks = new Map();
+  const unavailableSlots = new Set();
   let loadedKey = "";
   let loadedSlotId = "";
   let endedSlotId = "";
@@ -39,17 +43,33 @@
     return minutes ? `${minutes}:${String(rest).padStart(2,"0")}` : `0:${String(rest).padStart(2,"0")}`;
   }
 
+  function escapeHtml(value){
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+    })[char]);
+  }
+
   function art(program) {
-    if (program.posterUrl) return program.posterUrl;
-    return program.videoId ? `https://i.ytimg.com/vi/${program.videoId}/hqdefault.jpg` : "";
+    if (/^[A-Za-z0-9_-]{11}$/.test(program?.videoId || ""))
+      return `https://i.ytimg.com/vi/${program.videoId}/hqdefault.jpg`;
+    return "";
+  }
+
+  function activeProgram(block){
+    return slotFallbacks.get(block.id) || block.movie;
   }
 
   function ensureSchedule(nowMs) {
     const key = engine.dateKey(nowMs);
-    if (key === scheduleKey && schedule.length) return;
+    const bucket = Math.floor(nowMs / (engine.BLOCK_SECONDS * 1000));
+    if (key === scheduleKey && schedule.length &&
+        !(pendingCatalogChange && bucket !== lastScheduleBucket)) return;
     scheduleKey = key;
-    const available = catalog.filter(item => !failedVideoIds.has(item.videoId));
-    schedule = engine.createDaySchedule(nowMs, available.length ? available : catalog);
+    lastScheduleBucket = bucket;
+    pendingCatalogChange = false;
+    // Maintain ONE station schedule across all viewers. A video that fails on
+    // one device is substituted only in that device's current playback slot.
+    schedule = engine.createDaySchedule(nowMs, catalog);
     renderGuide(nowMs);
   }
 
@@ -67,7 +87,7 @@
     }
     els.guide.innerHTML = rows.map(item => {
       const p = item.movie;
-      return `<article class="guide-row" data-id="${item.id}"><time>${formatTime(item.startsAtMs)}</time><img src="${art(p)}" alt="" loading="lazy"><span><strong>${p.songTitle || p.title}</strong><small>${p.artist || "Ozzy TV"}</small></span></article>`;
+      return `<article class="guide-row" data-id="${escapeHtml(item.id)}"><time>${formatTime(item.startsAtMs)}</time><img src="${art(p)}" alt="" loading="lazy"><span><strong>${escapeHtml(p.songTitle || p.title)}</strong><small>${escapeHtml(p.artist || "Ozzy TV")}</small></span></article>`;
     }).join("");
   }
 
@@ -76,7 +96,7 @@
     const index = schedule.findIndex(item => item.id === block.id);
     els.next.innerHTML = Array.from({length:6}, (_, n) => schedule[(index + n + 1) % schedule.length]).map(item => {
       const p = item.movie;
-      return `<article class="next-card" style="--card-art:url('${art(p).replace(/'/g,"%27")}')"><time>${formatTime(item.startsAtMs)}</time><div><strong>${p.songTitle || p.title}</strong><span>${p.artist || "Rock / Metal"}</span></div></article>`;
+      return `<article class="next-card" style="--card-art:url('${art(p)}')"><time>${formatTime(item.startsAtMs)}</time><div><strong>${escapeHtml(p.songTitle || p.title)}</strong><span>${escapeHtml(p.artist || "Rock / Metal")}</span></div></article>`;
     }).join("");
   }
 
@@ -97,7 +117,8 @@
 
   function loadMedia(state) {
     if (!entered) return;
-    const program = state.block.movie;
+    const program = activeProgram(state.block);
+    if(unavailableSlots.has(state.block.id)){showUnavailable(state);return}
     const mediaKey = `${state.block.id}:${program.videoId}`;
 
     if (endedSlotId === state.block.id) {
@@ -115,7 +136,8 @@
       loadedSlotId = state.block.id;
       endedSlotId = "";
       els.stationCard.hidden = true;
-      player.loadVideoById({videoId:program.videoId,startSeconds:Math.max(0,state.mediaSeconds)});
+      player.loadVideoById({videoId:program.videoId,
+        startSeconds:slotFallbacks.has(state.block.id)?0:Math.max(0,state.mediaSeconds)});
       return;
     }
 
@@ -139,7 +161,7 @@
     const now = activeClockMs();
     ensureSchedule(now);
     const state = engine.resolve(now, schedule);
-    const p = state.block.movie;
+    const p = activeProgram(state.block);
     els.clock.textContent = `${formatTime(Date.now())} local`;
     els.mode.textContent = endedSlotId === state.block.id ? "LIVE · INTERMISSION" : (mode === "live" ? "LIVE MUSIC VIDEO" : "TIME SHIFTED");
     els.title.textContent = p.songTitle || p.title;
@@ -216,8 +238,17 @@
         },
         onError:function () {
           const state = schedule.length ? engine.resolve(activeClockMs(), schedule) : null;
-          if (state && state.block && state.block.movie.videoId) failedVideoIds.add(state.block.movie.videoId);
-          scheduleKey = "";
+          if (!state || !state.block) return;
+          const broken = activeProgram(state.block);
+          if (broken.videoId) failedVideoIds.add(broken.videoId);
+          // A single failed YouTube embed must NOT reshuffle the whole station
+          // or change every other viewer's schedule. Substitute only this slot.
+          const index = schedule.findIndex(item => item.id === state.block.id);
+          const fallback = schedule.slice(Math.max(0,index)+1).find(item =>
+            item.movie?.cleared && item.movie.videoId &&
+            !failedVideoIds.has(item.movie.videoId));
+          if(fallback)slotFallbacks.set(state.block.id,fallback.movie);
+          else unavailableSlots.add(state.block.id);
           loadedKey = "";
           loadedSlotId = "";
           endedSlotId = "";
@@ -226,6 +257,11 @@
       }
     });
   };
+
+  window.addEventListener("ozzy:catalog-updated", () => {
+    // Start refreshed station order at the NEXT ten-minute slot, not mid-song.
+    pendingCatalogChange = true;
+  });
 
   els.enter.addEventListener("click", enterStation);
   els.restart.addEventListener("click", restartSong);

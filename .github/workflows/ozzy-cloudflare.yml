@@ -1,0 +1,35 @@
+name: Ozzy Cloudflare catalog and rotation
+on:
+  pull_request:
+    paths:
+      - 'workers/ozzy-catalog/**'
+      - 'test/**'
+      - 'engine.js'
+      - 'app.js'
+      - 'data/**'
+      - 'index.html'
+      - '.github/workflows/ozzy-cloudflare.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'workers/ozzy-catalog/**'
+      - 'test/**'
+      - 'engine.js'
+      - 'app.js'
+      - 'data/**'
+      - 'index.html'
+      - '.github/workflows/ozzy-cloudflare.yml'
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test test/*.test.mjs
+      - run: node --check workers/ozzy-catalog/worker.mjs
+      - run: node --check engine.js
+      - run: node --check app.js
