@@ -55,3 +55,11 @@ test('engine honors verified cloud 1008-slot permutation, and rejects unknown so
  assert.equal(next.length,1008);
  assert.notEqual(next[5]?.videoId,'not-valid');
 });
+test('one video embed failure must not alter every viewer station schedule on the next day',()=>{
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ const scheduleBlock=app.match(/function ensureSchedule\(nowMs\)\s*\{[\s\S]*?renderGuide\(nowMs\);\s*\}/)?.[0]||'';
+ assert.ok(scheduleBlock.includes('engine.createDaySchedule(nowMs, catalog)'),
+  'the canonical station schedule always uses the same complete catalog');
+ assert.ok(!scheduleBlock.includes('catalog.filter(item => !failedVideoIds.has(item.videoId))'),
+  'failed video IDs must be substituted locally rather than shrinking the global schedule');
+});
