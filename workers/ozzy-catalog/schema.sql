@@ -19,3 +19,16 @@ CREATE TABLE IF NOT EXISTS ozzy_catalog_refresh (
  refreshed_at INTEGER NOT NULL,
  approved_count INTEGER NOT NULL CHECK(approved_count>=0)
 );
+-- Public official-channel RSS discoveries are review candidates only; they never
+-- enter ozzy_videos until a separate verified, reviewed manifest approves them.
+CREATE TABLE IF NOT EXISTS ozzy_candidates (
+ video_id TEXT PRIMARY KEY NOT NULL CHECK(length(video_id)=11),
+ artist TEXT NOT NULL,
+ video_title TEXT NOT NULL,
+ channel_id TEXT NOT NULL,
+ source_url TEXT NOT NULL,
+ published_at INTEGER NOT NULL,
+ discovered_at INTEGER NOT NULL,
+ review_status TEXT NOT NULL DEFAULT 'pending' CHECK(review_status IN ('pending','approved','rejected'))
+);
+CREATE INDEX IF NOT EXISTS ozzy_candidates_review ON ozzy_candidates(review_status,discovered_at);
