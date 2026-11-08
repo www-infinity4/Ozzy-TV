@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeVideo, buildWeeklyRotation, getCatalogResponse, refreshReviewedManifest, default as worker} from '../workers/ozzy-catalog/worker.mjs';
+import {normalizeVideo, buildWeeklyRotation, getCatalogResponse, refreshReviewedManifest, discoverOfficialVideoCandidates, default as worker} from '../workers/ozzy-catalog/worker.mjs';
 const video=(i)=>({videoId:'A'+String(i).padStart(10,'0'),artist:'Ozzy artist '+i,songTitle:'Rock track '+i,sourceUrl:'https://www.youtube.com/watch?v=A'+String(i).padStart(10,'0'),reviewedAt:Date.UTC(2026,10,7),embedApproved:true,reviewSource:'QuantaPhi approved source catalog'});
 const epoch=Date.UTC(2026,10,7,12);
 test('reviewed YouTube music videos normalize and unreviewed, forged or invalid clips fail closed',()=>{
@@ -66,4 +66,27 @@ test('API only returns public YouTube metadata and no third-party copyrighted me
  const s=await worker.fetch(new Request('https://quantaphi.org/video.mp4'),{});
  assert.equal(s.status,404);
  assert.equal((await s.json()).error,'not_found');
+});
+test('official YouTube RSS sources add new songs to a pending-only D1 discovery queue',async()=>{
+ const videoId='abcDEFG1234';
+ const atom='<?xml version="1.0"?><feed><entry><yt:videoId>'+videoId+'</yt:videoId><title>Ozzy Osbourne - New music video</title><published>2026-11-06T00:00:00Z</published></entry></feed>';
+ const rows=[];
+ const db={prepare(sql){return {bind(...params){return {sql,params}}}},async batch(q){rows.push(...q);return q.map(()=>({success:true}))}};
+ const r=await discoverOfficialVideoCandidates({DB:db},epoch,async(url,opts)=>{
+  assert.ok(url.startsWith('https://www.youtube.com/feeds/videos.xml?channel_id='));
+  assert.equal(opts.redirect,'error');
+  return {ok:true,status:200,headers:new Headers(),text:async()=>atom};
+ });
+ assert.equal(r.ok,true);
+ assert.ok(r.discovered>=1);
+ assert.ok(rows.some(x=>/INSERT OR IGNORE INTO ozzy_candidates/.test(x.sql)));
+ assert.ok(rows.some(x=>x.sql.includes("'pending'")));
+ assert.ok(!rows.some(x=>/INSERT INTO ozzy_videos/.test(x.sql)));
+});
+test('RSS search failures cannot promote or erase existing broadcast records',async()=>{
+ let statements=0;
+ const db={prepare(){statements++;return {bind(){return {}}}},batch(){statements++;}};
+ const r=await discoverOfficialVideoCandidates({DB:db},epoch,async()=>({ok:false,status:503}));
+ assert.equal(r.ok,false);
+ assert.equal(statements,0);
 });
