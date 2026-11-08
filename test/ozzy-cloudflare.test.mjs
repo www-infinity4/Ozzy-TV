@@ -90,3 +90,52 @@ test('RSS search failures cannot promote or erase existing broadcast records',as
  assert.equal(r.ok,false);
  assert.equal(statements,0);
 });
+
+test('reviewed catalog can PROMOTE an existing legacy song without a D1 primary-key collision',async()=>{
+ const queries=[];
+ const db={prepare(sql){return {bind(...args){return {sql,args}}}},async batch(q){queries.push(...q);return q.map(()=>({success:true}))}};
+ const env={DB:db,OZZY_REVIEWED_MANIFEST_URL:'https://raw.githubusercontent.com/www-infinity4/Ozzy-TV/main/data/approved-videos.json'};
+ const r=await refreshReviewedManifest(env,epoch,async()=>({
+  ok:true,status:200,headers:new Headers(),
+  text:async()=>JSON.stringify({items:[video(1)]})
+ }));
+ assert.equal(r.ok,true);
+ const q=queries.find(x=>/INSERT INTO ozzy_videos/.test(x.sql));
+ assert.ok(q);
+ assert.match(q.sql,/ON CONFLICT\s*\(video_id\)\s*DO UPDATE/i,
+  'legacy video IDs must be upserted to avoid aborting the D1 batch');
+ assert.match(q.sql,/review_status\s*=\s*excluded\.review_status/i);
+});
+
+test('official feeds track 404 outages without touching published music',async()=>{
+ const writes=[];
+ const db={prepare(sql){return {bind(...args){return {sql,args}}}},async batch(q){writes.push(...q);return q.map(()=>({success:true}))}};
+ const r=await discoverOfficialVideoCandidates({DB:db},epoch,async()=>({
+  ok:false,status:404,headers:new Headers()
+ }));
+ assert.equal(r.ok,false);
+ assert.equal(r.error,'official_feeds_unavailable');
+ assert.ok(writes.some(q=>/ozzy_feed_checks/i.test(q.sql)),
+  'record 404 diagnosis in isolated Cloudflare D1 health table');
+ assert.ok(writes.every(q=>!/ozzy_videos/i.test(q.sql)),
+  'never modify playback pool from a failed RSS fetch');
+});
+
+test('read-only discovery status endpoint discloses feed health without exposing secrets or editing songs',async()=>{
+ const fake={
+  prepare(sql){
+   return {bind(){return {
+    async first(){return {videos:80,approved:0,candidates:2}},
+    async all(){return {results:[{artist:'Ozzy Osbourne',checkedAt:epoch,statusCode:404,entryCount:0,error:'http_404'}]}}
+   }}};
+  }
+ };
+ const reply=await worker.fetch(new Request('https://quantaphi.org/api/ozzy/discovery-status'),{DB:fake});
+ assert.equal(reply.status,200);
+ const payload=await reply.json();
+ assert.equal(payload.legacyAndReviewed,80);
+ assert.equal(payload.approved,0);
+ assert.equal(payload.candidates,2);
+ assert.equal(payload.feeds[0].statusCode,404);
+ assert.ok(!JSON.stringify(payload).includes('token'));
+});
