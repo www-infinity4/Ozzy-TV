@@ -238,7 +238,7 @@ async function discoveryStatusResponse(env,origin=''){
  if(!env?.DB)return json({ok:false,error:'database_not_configured'},503,origin);
  try{
   const counts=await env.DB.prepare(
-   'SELECT (SELECT COUNT(*) FROM ozzy_videos) AS videos, (SELECT COUNT(*) FROM ozzy_videos WHERE review_status=\\'approved\\' AND embed_approved=1) AS approved, (SELECT COUNT(*) FROM ozzy_candidates) AS candidates'
+   "SELECT (SELECT COUNT(*) FROM ozzy_videos) AS videos, (SELECT COUNT(*) FROM ozzy_videos WHERE review_status='approved' AND embed_approved=1) AS approved, (SELECT COUNT(*) FROM ozzy_candidates) AS candidates"
   ).bind().first();
   const rows=await env.DB.prepare(
    'SELECT artist, channel_id AS channelId, checked_at AS checkedAt, status_code AS statusCode, entry_count AS entryCount, error FROM ozzy_feed_checks ORDER BY artist'
