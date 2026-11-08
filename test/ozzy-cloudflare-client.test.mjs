@@ -63,3 +63,12 @@ test('one video embed failure must not alter every viewer station schedule on th
  assert.ok(!scheduleBlock.includes('catalog.filter(item => !failedVideoIds.has(item.videoId))'),
   'failed video IDs must be substituted locally rather than shrinking the global schedule');
 });
+
+test('catalog count must distinguish reviewed Cloudflare videos from unverified legacy fallbacks',async()=>{
+ const {window}=harness({ok:true,count:1,items:[item(1)],weekKey:'2026-11-01',weeklyIds:[]});
+ await window.OzzyCloudCatalog.refresh();
+ const status=window.OzzyCloudCatalog.statusText(window.OZZY_CATALOG_STATUS);
+ assert.match(status,/1 reviewed/);
+ assert.match(status,/80 legacy/);
+ assert.doesNotMatch(status,/81 reviewed/);
+});
