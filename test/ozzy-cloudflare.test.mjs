@@ -161,3 +161,28 @@ test('official YouTube RSS redirects are not followed and leave approved music u
  assert.equal(result.ok,false);
  assert.equal(approvedWrites,0);
 });
+
+test('empty reviewed manifests never wipe published music metadata in D1',async()=>{
+ const statements=[];
+ const db={prepare(sql){statements.push(sql);return {bind(){return {}}}},batch(){throw Error('batch must not run')}};
+ const env={DB:db,OZZY_REVIEWED_MANIFEST_URL:'https://raw.githubusercontent.com/www-infinity4/Ozzy-TV/main/data/approved-videos.json'};
+ const result=await refreshReviewedManifest(env,epoch,async(_url,opts)=>{
+  assert.equal(opts.redirect,'manual');
+  return {ok:true,status:200,text:async()=>JSON.stringify({items:[]}),headers:new Headers()};
+ });
+ assert.equal(result.ok,false);
+ assert.equal(result.error,'approved_manifest_empty');
+ assert.equal(statements.length,0);
+});
+test('adding one approved video is incremental and never deletes unrelated reviewed songs',async()=>{
+ const statements=[];
+ const db={prepare(sql){return {bind(...args){return {sql,args}}}},async batch(q){statements.push(...q);return q.map(()=>({success:true}))}};
+ const env={DB:db,OZZY_REVIEWED_MANIFEST_URL:'https://raw.githubusercontent.com/www-infinity4/Ozzy-TV/main/data/approved-videos.json'};
+ const result=await refreshReviewedManifest(env,epoch,async()=>({
+  ok:true,status:200,headers:new Headers(),text:async()=>JSON.stringify({items:[video(1)]})
+ }));
+ assert.equal(result.ok,true);
+ assert.equal(statements.some(q=>/^DELETE FROM ozzy_videos/i.test(q.sql)),false,
+  'do not erase verified rows just because the latest manifest omitted them');
+ assert.equal(statements.filter(q=>/INSERT INTO ozzy_videos/.test(q.sql)).length,1);
+});
